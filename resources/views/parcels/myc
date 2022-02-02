@@ -1,0 +1,127 @@
+#
+# class inquiry_items(Basemodel):
+#     __table_args__ = {'schema': 'crm'}
+#     item_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+#     product_code = db.Column(db.String)
+#     description = db.Column(db.String)
+#     quantity = db.Column(db.DECIMAL)
+#     inquiry_id = db.Column(db.Integer, db.ForeignKey(customer_inquiry.inquiry_id))
+#     unit_cost = db.Column(db.DECIMAL)
+#     total_cost = db.Column(db.DECIMAL)
+#
+#     # def __init__(self):
+#     #     desc = bom_products.query.filter_by(product_code=self.product_code).description
+#     #     if desc is not None:
+#     #         self.description = desc
+#
+#     @property
+#     def item_desc(self):
+#         if self.product_code is not None:
+#             description = bom_products.query.filter_by(product_code=self.product_code).description
+#             if description is not None:
+#                 return description
+#             else:
+#                 return self.product_code
+#         else:
+#             return None
+#
+#
+#     def post_process(self,old_record=None):
+#         #query parts of this products
+#         if self.product_code is not None:
+#             prod_parts = product_parts.query.filter_by(product_code = self.product_code).all()
+#             if len(prod_parts)>0:
+#
+#                 for part in prod_parts:
+#                     raw_mat = parts_raw_materials.query.filter_by(part_id = part.part_id).all()
+#
+#                     #create parts for this products in item parts table
+#                     item_parts.create(
+#                         values = dict(
+#                             item_id=self.item_id,
+#                             part_id = part.part_id,
+#                             quantity = part.quantity,
+#                         )
+#                     )
+#
+#                     #add raw materials required for each part
+#                     for mat in raw_mat:
+#                         item_materials.create(
+#                             values =dict(
+#                                 item_id = self.item_id,
+#                                 quantity = mat.quantity,
+#                                 form = mat.form,
+#                                 size = mat.size,
+#                             )
+#                         )
+#
+# class item_parts(Basemodel):
+#     __table_args__ = {'schema': 'crm'}
+#     item_part_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+#     item_id = db.Column(db.Integer, db.ForeignKey(inquiry_items.item_id))
+#     part_id = db.Column(db.Integer, db.ForeignKey(bom_parts.part_id))
+#     quantity = db.Column(db.DECIMAL)
+#     unit_cost = db.Column(db.DECIMAL)
+#
+# class item_materials(Basemodel):
+#     __table_args__ = {'schema': 'crm'}
+#     sub_item_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+#     item_id = db.Column(db.Integer, db.ForeignKey(inquiry_items.item_id))
+#     description = db.Column(db.String)
+#     quantity = db.Column(db.DECIMAL)
+#     unit_cost = db.Column(db.DECIMAL)
+#     form = db.Column(db.String)
+#     size = db.Column(db.String)
+#
+#     def post_process(self, old_record=None):
+#         if request.method in ['PUT','PATCH','DELETE','POST']:
+#             mat_cost = 0
+#             other_req_cost = 0
+#             raw_mat = item_materials.query.filter_by(item_id=self.item_id).all()
+#             for item in raw_mat:
+#                 mat_cost += (item.unit_cost or 0 ) * item.quantity
+#
+#             other_req = other_item_requirements.query.filter_by(item_id=self.item_id).all()
+#             for req in other_req:
+#                 other_req_cost += (req.total_cost or 0)
+#
+#             total_cost = inquiry_items.query.filter_by(item_id=self.item_id).first().total_cost or 0
+#             quantity = inquiry_items.query.filter_by(item_id=self.item_id).first().quantity or 1
+#             inquiry_items.query.filter_by(item_id=self.item_id).update(
+#                 dict(unit_cost=(mat_cost+other_req_cost), total_cost = quantity*(mat_cost+other_req_cost)
+#             ))
+#             db.session.commit()
+#         return True
+#
+# class other_item_requirements(Basemodel):
+#     __table_args__ = {'schema': 'crm'}
+#     req_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+#     item_id = db.Column(db.Integer, db.ForeignKey(inquiry_items.item_id))
+#     title = db.Column(db.String)
+#     description = db.Column(db.String)
+#     quantity = db.Column(db.DECIMAL)
+#     size = db.Column(db.DECIMAL)
+#     rate = db.Column(db.DECIMAL)
+#     total_cost = db.Column(db.DECIMAL)
+#
+#     power_cost = 0
+#     markup_cost = 0
+#
+#     def post_process(self, old_record=None):
+#         total_cost = inquiry_items.query.filter_by(item_id=self.item_id).first().total_cost or 0
+#         if self.title == 'Power' or self.title == 'power' or self.title == 'POWER':
+#             power_cost = (self.rate/100)*total_cost
+#             other_item_requirements.query.filter_by(req_id = self.req_id).update(dict(total_cost=power_cost))
+#             inquiry_items.query.filter_by(item_id=self.item_id).update(dict(total_cost=total_cost + power_cost))
+#             db.session.commit()
+#         elif self.title == 'Mark Up':
+#             markup_cost = (self.rate/100)*total_cost
+#             other_item_requirements.query.filter_by(req_id = self.req_id).update(dict(total_cost=markup_cost))
+#             inquiry_items.query.filter_by(item_id=self.item_id).update(dict(total_cost=total_cost + markup_cost))
+#             db.session.commit()
+#         elif self.title=='Outsourced Services' or self.title=='Labour' or self.title=='Tooling' or self.title=='Nitriding':
+#             inquiry_items.query.filter_by(item_id=self.item_id).update(dict(total_cost=total_cost + self.total_cost))
+#             db.session.commit()
+#
+#
+#         return True
